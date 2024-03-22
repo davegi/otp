@@ -22,6 +22,10 @@
 *.la
 *.lo
 
+# ignore CRT files
+glibc-2.31/*
+glibc*
+
 # Shared objects (inc. Windows DLLs)
 *.dll
 *.so

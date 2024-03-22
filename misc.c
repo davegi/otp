@@ -1,6 +1,9 @@
 #include "otp.h"
 #include "munit/munit.h"
 
+#include <stdio.h>
+#include <sys/stat.h>
+
 off_t get_file_length(const char* path) {
     struct stat statbuf;
     if (stat(path, &statbuf) == 0) {

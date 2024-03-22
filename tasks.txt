@@ -1,4 +1,0 @@
-- set up CL 
-- set up decode and decode_char
-- set up macros for error codes
-- UTs

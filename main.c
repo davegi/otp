@@ -1,215 +1,310 @@
-#include "otp.h"
+#include <ctype.h>
+#include <getopt.h>
+#include <signal.h>
+#include <stdarg.h>
+#include <stdbool.h>
+#include <stddef.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
 #include "munit/munit.h"
 
-char decode_char(char key_char, char ciphertext_char, const char* alphabet, size_t alpha_length) {
-    assert(alphabet);
-    
-    /*
-    //DG 
-    ciphertext_char -= 'A'; //4 
-    char plain_char = ciphertext_char - key_char; //
-    
-    if (plain_char < 0) {
-        plain_char += alpha_length;
-    }
-    
-    return plain_char % alpha_length;
-    */
-    
-    
-    int key_index = get_char_index(key_char, alphabet, alpha_length);
-    int ciphertext_index =  get_char_index(ciphertext_char, alphabet, alpha_length);
-    
-    int cipher_minus_key = ciphertext_index - key_index;
-    if (cipher_minus_key < 0) {
-        cipher_minus_key += alpha_length;
-    }
-    int index = cipher_minus_key % alpha_length; //FIXME
-    char plaintext_new_char = alphabet[index]; 
+#include "otp.h"
 
-    return plaintext_new_char; 
+// HACK: move to build cl
+#define DEBUG
+#undef _WIN32
+
+#define EQUAL(a, b) (strcmp((a), (b)) == 0)
+
+#ifdef _WIN32
+#define BP() __debugbreak()
+#else
+#define BP() (raise(SIGTRAP))
+#endif // _WIN32
+
+#ifdef DEBUG
+#define ASSUME(expr, ...)                                                      \
+  if (!(expr)) {                                                               \
+    fprintf(stderr,                                                            \
+            "Assumption (%s) failed in file %s, line %d, function %s: \n",     \
+            #expr, __FILE__, __LINE__, __func__);                              \
+    fprintf(stderr, ##__VA_ARGS__);                                            \
+    fprintf(stderr, "\n");                                                     \
+    char choice;                                                               \
+    fprintf(stderr, "Choose an action: [E]xit, [I]gnore, [D]ebug\n");          \
+    scanf(" %c", &choice);                                                     \
+    if (toupper(choice) == 'E') {                                              \
+      exit(EXIT_FAILURE);                                                      \
+    } else if (toupper(choice) == 'D') {                                       \
+      BP();                                                                    \
+    }                                                                          \
+  }
+#else
+#define ASSUME(expr, ...)
+#endif // DEBUG
+
+// examples from PDF based on this
+#define DEFAULT_ALPHABET "ABCDEFGHIJKLMNOPQRSTUVWXYZ"
+
+const const_string alphabet = {.text = DEFAULT_ALPHABET,
+                               .text_length = sizeof(DEFAULT_ALPHABET) - 1};
+
+typedef enum { UNDEFINED, KEY, ENCODE, DECODE } CommandType;
+
+typedef struct {
+  int key_length;
+  char *key_file;
+  FILE *kf;
+} KeyArgs;
+
+typedef struct {
+  char *key_file;
+  char *input_file;
+  char *output_file;
+  FILE *kf;
+  FILE *inf;
+  FILE *outf;
+} EncodeDecodeArgs;
+
+typedef union {
+  KeyArgs key_args;
+  EncodeDecodeArgs encode_decode_args;
+} CommandArgs;
+
+typedef struct {
+  CommandType command;
+  int verbosity;
+  CommandArgs args;
+} OtpCommand;
+
+const const_string *generate_key(const const_string *key,
+                                 const const_string *alphabet) {
+  ASSUME(key, "NULL key");
+  ASSUME(key->text_length > 0, "invalid key length (%zu)", key->text_length);
+  ASSUME(alphabet, "NULL alphabet");
+  ASSUME(alphabet->text_length == strlen(alphabet->text),
+         "invalid key length (%zu)", key->text_length);
+
+  // Seed the random number generator
+  srand(time(NULL));
+
+  // Allocate memory for the key - cast around const
+  *((char **)&key->text) = malloc((key->text_length + 1) * sizeof(char));
+  ASSUME(key->text != NULL, "Failed to allocate memory for key")
+  if (key->text == NULL) {
+    return NULL; // Failed to allocate memory
+  }
+  // Generate the key
+  for (int i = 0; i < key->text_length; i++) {
+    int random_index = rand() % alphabet->text_length;
+    // NOTES: cast away const❗
+    *(char *)&(key->text[i]) = alphabet->text[random_index];
+  }
+
+  // Null-terminate the key
+  char *ch = (char *)&(key->text[key->text_length]);
+  *ch = '\0';
+
+  return key;
 }
 
-//create ciphertext --> original message
-bool decode(const char* key, const char* ciphertext, const char* alphabet, size_t alpha_length) {
-    assert(key);
-    assert(ciphertext);
-    assert(alphabet);
-    assert(alpha_length > 0);
-    // assert(strlen(key) >= strlen(ciphertext));
+// Function to encode a character
+char encode_symbol(char plain, char key, const char *alphabet, size_t length) {
+  ASSUME(alphabet, "NULL alphabet");
+  ASSUME(length > 0, "invalid length")
 
-    size_t cipher_len = strlen(ciphertext);
-    size_t i = 0;
-    //buffer space to hold result of ciphertext back to original plaintext message
-    char* plaintext_new = malloc(sizeof(char) * cipher_len + 1);
-    for (i = 0; ciphertext[i] != '\0'; i++) {
-        plaintext_new[i] = decode_char(key[i], ciphertext[i], alphabet, alpha_length);
-    }
-    plaintext_new[i] = '\0';
-    printf("new plaintext is: %s\n", plaintext_new);
-    free(plaintext_new);
-    return true;
+  int message_index = strchr(alphabet, plain) - alphabet;
+  int key_index = strchr(alphabet, key) - alphabet;
+
+  int encoded_index = (message_index + key_index) % length;
+
+  return alphabet[encoded_index];
 }
 
-//should I make this function one that can encode and decode --> seems wise
-char encode_char(char key_char, char plaintext_char, const char* alphabet, size_t alpha_length) {
-    assert(alphabet); 
-    // assert(alpha_length == strlen(alphabet));
-    // assert(alphabet[0] <= plaintext_char && plaintext_char >= alphabet[26]); //no -1 to ensure it's a char; alphabet[alpah_length -1] == ' ' aka ascii 32
-    
-    int key_index = get_char_index(key_char, alphabet, alpha_length);
-    int plaintext_index = get_char_index(plaintext_char, alphabet, alpha_length);
-    
-    int sum_of_indexes = (key_index + plaintext_index) % alpha_length; //FIXME 
-    char cipher_char = alphabet[sum_of_indexes]; 
-    
-    return cipher_char;
+// Function to decode a character
+char decode_symbol(char cipher, char key, const char *alphabet, size_t length) {
+  ASSUME(alphabet, "NULL alphabet");
+  ASSUME(length > 0, "invalid length")
+
+  int ciphertext_index = strchr(alphabet, cipher) - alphabet;
+  int key_index = strchr(alphabet, key) - alphabet;
+
+  int decoded_index = (ciphertext_index - key_index + length) % length;
+
+  return alphabet[decoded_index];
 }
 
-//generate ciphertext on heap and returned via char*
-char* encode(const char* key, const char* plaintext, const char* alphabet, size_t alpha_length) { //invalid chars, strings too long, emptry strings
-    assert(key);
-    assert(plaintext);
-    assert(alphabet);
-    assert(alpha_length > 0);
-    // assert(strlen(key) >= strlen(plaintext));
-
-    FILE* fd_cipher = fopen("ciphertext.txt", "w");
-    int len_plaintext = strlen(plaintext);
-    size_t i = 0;
-    //buffer space to hold generated ciphertext
-    char* cipher = malloc(sizeof(char) * len_plaintext + 1);//TODO -> CHANGE TO STACK MEM 
-    //pass each char of key and plaintext to encode_char
-    for (i = 0; plaintext[i] != '\0'; i++) {
-        cipher[i] = encode_char(key[i], plaintext[i], alphabet, alpha_length);
-        fputc(cipher[i], fd_cipher);
-    }
-    cipher[i] = '\0';
-    // putc('\0', fd_cipher); --> getting READ BLOCK ATTEMPTING TO PUT NEWLINE 
-    // printf("ciphertext len: %lu, ciphertext:%s\n", strlen(cipher), cipher);
-    fclose(fd_cipher);
-    // free(cipher);
-
-    return cipher;
+char *encode(const char *key, const char *plaintext, const char *alphabet,
+             size_t alpha_length) {
+  return NULL;
 }
 
-//obtain random number to pull random letter from alphabet to create key 
-int get_random_numb(int alpha_len) {
-    int numb = rand() % alpha_len; //added -1 to get letter 'A'
-        //this should not be involved with the implementation of how the result of the fx gets used 
-    return numb;
+char *decode(const char *key, const char *ciphertext, const char *alphabet,
+             size_t alpha_length) {
+  return NULL;
 }
 
-void usage() { //TODO
-// void usage(int exit_code) { //TODO
-    // assert(exit_code == EXIT_FAILURE || exit_code == EXIT_SUCCESS); //validate not using usage in incorrect way
-    printf("usage: ./otp... \n"); //will have all the values available
-    exit(EXIT_FAILURE);
+void print_usage() {
+  printf("Usage: otp <command> [options]\n");
+  // ...
 }
 
-int main(int argc, char *argv[]) {
-    int opt = 0;
-    FILE* fd = NULL;
-    char* app_name = NULL;
-    srand(0);
+void print_help() {
+  printf("Help: otp <command> [options]\n");
+  // ...
+}
 
-    //run unit tests 
-    if (argc == 1) {
-        return munit_suite_main(&test_suite, (void*) "µnit", argc, argv);
-    }
-     
-    while ((opt = getopt(argc, argv, "a:mvh")) != -1) { 
-        switch (opt) {
-        case 'h':
-            printf("detailed help goes here\n"); //FIXME 
-            exit(EXIT_SUCCESS);
-        case 'a':
-            app_name = optarg;
-            break;
-        //provide count of characters passed on CL for key generation
-        case 'm':
-            //if argv[2] == encode, print argv[3]
-            //else break
-            printf("total characters: %s\n", argv[optind]);
-            break;
-        case 'v': //what is verbose? --> key gen print each value as it's discovered, e/d each character as processed --> enable more output
-            printf("yup, got v\n"); //notify still running, notify of each step is excuted and terminated
-            break;
-        default:
-            // fprintf(stderr, "Usage: %s requires the use of a keyword: key, encode or decode\n", argv[0]); --> can use for usage fx 
-            // exit(EXIT_FAILURE); // better to return -1?
-            usage();
-        }
-    }
+void exit_with_message(char *message, int exit_code) {
+  fprintf(stderr, "%s\n", message);
+  exit(exit_code);
+}
+void otp(OtpCommand *command) {
+  ASSUME(command, "NULL command");
 
-    if (app_name == NULL) {
-        usage(); 
-    }
-
-    char* plaintext_ptr = argv[3];
-    assert(plaintext_ptr);
-    int plaintext_len = strlen(argv[3]);
-    char* ciphertext = NULL;
-    size_t key_chars;
-    // size_t cipher_chars;
-    // char* rand_char[plaintext_len];
-    if ((IS_STR_EQUAL(app_name, "key"))) {
-        // int plaintext_len = strlen(argv[3]);
-        if (plaintext_ptr) {
-            FILE* fd = fopen("key.txt", "w");
-            char* ptr_to_alphabet = "ABCDEFGHIJKLMNOPQRSTUVWXYZ ";
-            for (int i = 0; i < plaintext_len; i++) {
-                //obtain random number between 0 and length of plaintext messsage
-                int rand_num = get_random_numb(ALPHA_LEN);
-                //index random char from alphabet to create key.txt 
-                char rand_char = ptr_to_alphabet[rand_num];
-                fputc(rand_char, fd);
-            }
-            fputc('\n', fd); 
-        }
-        else {
-            fprintf(stderr, "error generating key\n"); //TODO fix error handling flow
-            exit(EXIT_FAILURE);
-        }        
+  const int min_key_length = 0;
+  switch (command->command) {
+  case KEY: {
+    KeyArgs *key_args = &command->args.key_args;
+    if (key_args->key_length <= min_key_length) {
+      print_help();
     } else {
-        fd = fopen("key.txt", "r"); 
-        if (!fd) {
-            fprintf(stderr, "error: must generate a key file\n");
-            exit(EXIT_FAILURE);
-        }
-        //read in entire key file and save to buffer
-        int key_len = get_file_length("key.txt");
-        // char key_ptr[key_len + 1];
-        char key_ptr[key_len];
-        memset(key_ptr, '\0', key_len);
-        key_chars = fread(key_ptr, sizeof(char), key_len - 1, fd); //-1 add because of new line char 
-        assert(key_chars != 0);
-        if (IS_STR_EQUAL("encode", app_name)) {
-            ciphertext = encode(key_ptr, plaintext_ptr, ALPHABET, ALPHA_LEN);
-        }
-        else if (IS_STR_EQUAL("decode", app_name)) {
-            FILE* fd_cipher = fopen("ciphertext.txt", "r");
-            FILE* fd_key = fopen("key.txt", "r");
-            int key_len = get_file_length("key.txt") + 1; //len = 9
-            char key_ptr_2[key_len];
-            memset(key_ptr_2, '\0', key_len);
-            int ciphertext_len = get_file_length("ciphertext.txt") + 1; //len = 8
-            char cipher_ptr[ciphertext_len];
-            memset(cipher_ptr, '\0', ciphertext_len);
-            key_chars = fread(key_ptr_2, sizeof(char), key_len, fd_key);
-            size_t cipher_chars = fread(cipher_ptr, sizeof(char), ciphertext_len, fd_cipher);
-            assert(cipher_chars > 0);
-            decode(key_ptr_2, cipher_ptr, ALPHABET, ALPHA_LEN);
-            fclose(fd_cipher);
-            fclose(fd_key);
-        } else {
-            fclose(fd); 
-            usage();
-        }
-        free(ciphertext);
-        fclose(fd); 
-        exit(EXIT_SUCCESS);
-    } 
+      key_args->kf = (key_args->key_file == NULL)
+                         ? stdout
+                         : fopen(command->args.key_args.key_file, "w");
+    }
+    const const_string *key =
+        generate_key((const_string[1]){key_args->key_length}, &alphabet);
+    if (key_args->kf) {
+      fclose(key_args->kf);
+    }
+    break;
+  }
+  case ENCODE:
+  case DECODE:
+    if (command->args.encode_decode_args.key_file == NULL) {
+      print_help();
+    } else {
+      command->args.encode_decode_args.kf =
+          (command->args.encode_decode_args.key_file == NULL)
+              ? stdin
+              : fopen(command->args.encode_decode_args.key_file, "r");
+    }
+    command->args.encode_decode_args.inf =
+        (command->args.encode_decode_args.input_file == NULL)
+            ? stdin
+            : fopen(command->args.encode_decode_args.input_file, "r");
+    command->args.encode_decode_args.outf =
+        (command->args.encode_decode_args.output_file == NULL)
+            ? stdout
+            : fopen(command->args.encode_decode_args.output_file, "w");
+    ASSUME(command->args.encode_decode_args.kf, "invlaid key file stream");
+    ASSUME(command->args.encode_decode_args.inf, "invalid input file")
+    ASSUME(command->args.encode_decode_args.outf, "invalid output file")
+    break;
+  default:
+    exit_with_message("Invalid command", EXIT_FAILURE);
+  }
+}
 
-    //usage(); //why do we have this here
+OtpCommand *parse_args(OtpCommand *command, int argc, char **argv) {
+  if (EQUAL(argv[1], "key")) {
+    command->command = KEY;
+  } else if (EQUAL(argv[1], "encode")) {
+    command->command = ENCODE;
+  } else if (EQUAL(argv[1], "decode")) {
+    command->command = DECODE;
+  } else {
+    ASSUME((EQUAL(argv[1], "key")) || (EQUAL(argv[1], "encode")) ||
+               (EQUAL(argv[1], "decode")),
+           "Invalid command");
+    exit_with_message("Invalid command", EXIT_FAILURE);
+  }
+
+  optind++;
+
+  int c;
+  while ((c = getopt_long(argc, argv, "k:f:p:c:v?", NULL, NULL)) != -1) {
+    switch (c) {
+    case 'k':
+      ASSUME(command->command == KEY && command->args.key_args.key_length == 0,
+             "Invalid or duplicate 'key-length' argument");
+      if (command->command != KEY || command->args.key_args.key_length != 0) {
+        exit_with_message("Invalid or duplicate 'key-length' argument", 1);
+      }
+      command->args.key_args.key_length = atoi(optarg);
+      break;
+
+    case 'f':
+      ASSUME(command->args.key_args.key_file == NULL &&
+                 command->args.encode_decode_args.key_file == NULL,
+             "Duplicate 'key-file' argument");
+      if (command->args.key_args.key_file != NULL ||
+          command->args.encode_decode_args.key_file != NULL) {
+        exit_with_message("Duplicate 'key-file' argument", 1);
+      }
+      if (command->command == KEY) {
+        command->args.key_args.key_file = optarg;
+      } else {
+        command->args.encode_decode_args.key_file = optarg;
+      }
+      break;
+
+    case 'p':
+      ASSUME((command->command == ENCODE || command->command == DECODE) &&
+                 command->args.encode_decode_args.input_file == NULL,
+             "Invalid or duplicate 'plain-text-file' argument");
+      if (command->command == KEY ||
+          command->args.encode_decode_args.input_file != NULL) {
+        exit_with_message("Invalid or duplicate 'plain-text-file' argument", 1);
+      }
+      command->args.encode_decode_args.input_file = optarg;
+      break;
+
+    case 'c':
+      ASSUME((command->command == ENCODE || command->command == DECODE) &&
+                 command->args.encode_decode_args.output_file == NULL,
+             "Invalid or duplicate 'cipher-text-file' argument");
+      if (command->command == KEY ||
+          command->args.encode_decode_args.output_file != NULL) {
+        exit_with_message("Invalid or duplicate 'cipher-text-file' argument",
+                          1);
+      }
+      command->args.encode_decode_args.output_file = optarg;
+      break;
+
+    case 'v':
+      command->verbosity++;
+      break;
+
+    case '?':
+      print_usage();
+      return 0;
+
+    default:
+      print_help();
+      return 0;
+    }
+  }
+  return command;
+}
+
+int main(int argc, char **argv) {
+
+  if (argc < 2) {
+    print_usage();
+    return 1;
+  }
+
+  if (EQUAL(argv[1], "test")) {
+    return munit_suite_main(&test_suite, (void *)"µnit", argc - 1, argv + 1);
+  }
+
+  OtpCommand *command = parse_args((OtpCommand[1]){}, argc, argv);
+
+  otp(command);
+
+  return 0;
 }
