@@ -1,13 +1,9 @@
 {
-    "workbench.colorCustomizations": {
-        "activityBar.background": "#093519",
-        "titleBar.activeBackground": "#0D4A22",
-        "titleBar.activeForeground": "#F3FDF7"
-    },
-    // "editor.wordWrap": "wordWrapColumn",
-    // "editor.wordWrapColumn": 120,
     "cSpell.words": [
+        "EQNVZ",
         "genkey",
+        "ontinue",
+        "XMCKL",
         "μunit"
     ],
     "clangd.checkUpdates": true,
@@ -15,12 +11,22 @@
     "lldb.dereferencePointers": true,
     "lldb.consoleMode": "commands",
     "lldb.showDisassembly": "auto",
-    "C_Cpp.clang_format_fallbackStyle": "google",
-    // "C_Cpp.clang_format_style": "{ BasedOnStyle: Google, UseTab: Never, IndentWidth: 10, TabWidth: 4, BreakBeforeBraces: Attach, AllowShortIfStatementsOnASingleLine: false, IndentCaseLabels: false, ColumnLimit: 120, AccessModifierOffset: -4, DerivePointerAlignment: false, PointerAlignment: Left }",
-    // "C_Cpp.clang_format_fallbackStyle": "Google",
-    // "editor.defaultFormatter": "ms-vscode.cpptools",
-    // "C_Cpp.clang_format_style": "",
-    // // "editor.formatOnSave": true,
-    // "editor.formatOnType": true,
-    // "C_Cpp.clang_format_path": "/path/to/clang-format"
+    "C_Cpp.clang_format_fallbackStyle": "Google",
+    // "C_Cpp.clang_format_style": "file:./.vscode/.clang-format",
+    "C_Cpp.clang_format_style": "file",
+    "colorTabs.config": [
+        {
+            "regex": ".*/web/.*"
+        },
+        {
+            "regex": ".*/mobile/.*"
+        }
+    ],
+    "windowColors.🌈 BaseColor": "rebeccapurple",
+    "workbench.colorCustomizations": {
+        "activityBar.background": "#663399",
+        "titleBar.activeBackground": "#8547C2",
+        "titleBar.activeForeground": "#FCFBFE"
+    },
+    "windowColors.🌈 DeleteSettingsFileUponExit": true,
 }

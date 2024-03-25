@@ -20,27 +20,19 @@
         //     "externalConsole": false,
         //     "MIMode": "lldb"
         // },
-        // {
-        //     "name": "Dave's Launch Program",
-        //     "type": "gdb",
-        //     "request": "launch",
-        //     "target": "${workspaceFolder}/otp",
-        //     "arguments": "-a decode ciphertext.txt hello",
-        //     "stopAtEntry": true,
-        //     "cwd": "${workspaceRoot}",
-        //     "valuesFormatting": "parseText"
-        // },
         {
             "name": "Dave's Launch Program",
             "type": "gdb",
             "request": "launch",
             "target": "${workspaceFolder}/otp",
-            // "arguments": "-a", // decode ciphertext.txt hello",
+            // "arguments": "test --no-fork",
             // "arguments": "-a", // BUGBUG
             // "arguments": "foo",
             // "arguments": "key",
-            "arguments": "test --no-fork",
-            "stopAtEntry": true,
+            // "arguments": "key 10 -k key.txt",
+            // "arguments": "encode -k key.txt",
+            "arguments": "encode -k key.txt -p djg.txt -s1",
+            "stopAtEntry": false,
             "cwd": "${workspaceRoot}",
             "valuesFormatting": "parseText",
             "preLaunchTask": "build" // This should match the label of your build task in tasks.json

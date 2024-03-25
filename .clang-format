@@ -1,11 +1,12 @@
+# HACK: would like to move this file to .vscode
 BasedOnStyle: Google
 UseTab: Never
-IndentWidth: 10
+IndentWidth: 4
 TabWidth: 4
 BreakBeforeBraces: Attach
 AllowShortIfStatementsOnASingleLine: false
 IndentCaseLabels: false
-ColumnLimit: 120
+ColumnLimit: 180
 AccessModifierOffset: -4
 DerivePointerAlignment: false
 PointerAlignment: Left

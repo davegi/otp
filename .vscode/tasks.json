@@ -7,6 +7,7 @@
             "command": "gcc",
             "args": [
                 "-g",
+                "-D", "DEBUG",
                 "-I", "/usr/include",
                 "-I", "/usr/local/include",
                 "-I", "./munit",
